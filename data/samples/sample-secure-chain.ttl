@@ -1,0 +1,75 @@
+#############################
+# Dependency Graph Summary
+#############################
+# MyApp 2.0 → depends on curl 7.78.0 and OpenSSL 1.1.1
+# curl 7.78.0 → depends on OpenSSL 1.1.1
+# OpenSSL 1.1.1 → vulnerable to CVE-2021-34527
+
+@prefix sc: <https://w3id.org/secure-chain/> .
+@prefix ex: <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+#############################
+# Software: OpenSSL
+#############################
+
+ex:OpenSSL a sc:Software ;
+    sc:hasSoftwareVersion ex:OpenSSL_1_1_1 .
+
+ex:OpenSSL_1_1_1 a sc:SoftwareVersion ;
+    sc:versionIdentifier "1.1.1" ;
+    sc:releaseDate "2018-09-11"^^xsd:date ;
+    sc:license ex:Apache_License_2_0 ;
+    sc:vulnerableTo ex:CVE_2021_34527 .
+
+#############################
+# Software: cURL
+#############################
+
+ex:curl a sc:Software ;
+    sc:hasSoftwareVersion ex:curl_7_78_0 .
+
+ex:curl_7_78_0 a sc:SoftwareVersion ;
+    sc:versionIdentifier "7.78.0" ;
+    sc:releaseDate "2021-07-21"^^xsd:date ;
+    sc:license ex:MIT_License ;
+    sc:dependsOn ex:OpenSSL_1_1_1 .
+
+#############################
+# Software: MyApp
+#############################
+
+ex:MyApp a sc:Software ;
+    sc:hasSoftwareVersion ex:MyApp_2_0 .
+
+ex:MyApp_2_0 a sc:SoftwareVersion ;
+    sc:versionIdentifier "2.0" ;
+    sc:releaseDate "2023-01-15"^^xsd:date ;
+    sc:license ex:Custom_License ;
+    sc:dependsOn ex:curl_7_78_0 ;
+    sc:dependsOn ex:OpenSSL_1_1_1 .
+
+#############################
+# Vulnerability
+#############################
+
+ex:CVE_2021_34527 a sc:Vulnerability ;
+    sc:cveId "CVE-2021-34527" ;
+    sc:description "Remote code execution in Windows Print Spooler." ;
+    sc:severity "Critical" .
+
+#############################
+# Licenses
+#############################
+
+ex:Apache_License_2_0 a sc:License ;
+    sc:licenseName "Apache License 2.0" ;
+    sc:licenseURL <https://www.apache.org/licenses/LICENSE-2.0> .
+
+ex:MIT_License a sc:License ;
+    sc:licenseName "MIT License" ;
+    sc:licenseURL <https://opensource.org/licenses/MIT> .
+
+ex:Custom_License a sc:License ;
+    sc:licenseName "MyApp Custom License" ;
+    sc:licenseURL <http://example.org/licenses/myapp> .
