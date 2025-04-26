@@ -30,4 +30,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-print("FastAPI app Initialized")
+# API Root endpoint
+@app.get("/")
+async def root():
+    """Root endpoint."""
+    return {"message": "Welcome to the SBOM Construction Tool API"}
+
+# Run the application
+if __name__ == "__main__":
+    import uvicorn
+    from config import API_HOST, API_PORT
+    
+    uvicorn.run("api:app", host=API_HOST, port=API_PORT, reload=True)
