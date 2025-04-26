@@ -24,6 +24,7 @@ Beneficiaries: Our OKN team, NSF, Anyone interested (Open Source)
 Sponsors: Currently NSF but open to any new sponsors. 
 
 ## Useful Resources:
+- [Project Github Repo](https://github.com/ghudeihed/secure_chain_kg)
 - [Knowledge Graph for Software Supply Cha​in Security Project](https://purdue-hcss.github.io/nsf-software-supply-chain_security/)
 - [Ontology Documentation](https://w3id.org/secure-chain)
 - [Data Dump](https://github.com/purdue-hcss/secure-chain-knowledge-graph)
