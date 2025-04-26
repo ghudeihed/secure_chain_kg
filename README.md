@@ -23,6 +23,35 @@ Example tools include but are not limited to:
 Beneficiaries: Our OKN team, NSF, Anyone interested (Open Source)
 Sponsors: Currently NSF but open to any new sponsors. 
 
+## Enviornement Setup:
+### Backend
+#### Via pip
+```
+# Change directory 
+cd backend/
+
+# Create virtual env 
+python3 -m venv ven
+
+# Activate the virtual env
+source ./venv/bin/activate
+
+# Install requirements.txt
+pip install -r requirements.txt
+```
+
+#### Via poetry 
+```
+# Change directory 
+cd backend/
+
+# Activate the virtual env
+poetry shell
+
+# Install requirements.txt
+poetry install
+```
+
 ## Useful Resources:
 - [Project Github Repo](https://github.com/ghudeihed/secure_chain_kg)
 - [Knowledge Graph for Software Supply Cha​in Security Project](https://purdue-hcss.github.io/nsf-software-supply-chain_security/)

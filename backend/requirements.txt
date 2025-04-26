@@ -5,3 +5,5 @@ rdflib==7.1.4
 SPARQLWrapper==2.0.0
 python-dotenv==1.1.0
 pydantic==2.11.3
+ipykernel==6.29.5
+jupyter==1.1.1
