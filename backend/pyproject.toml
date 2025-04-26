@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "backend"
+version = "0.1.0"
+description = ""
+authors = ["Ghazi Hudeihed <ghazi@hudeihed.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.115.12"
+uvicorn = "^0.34.2"
+requests = "^2.32.3"
+rdflib = "^7.1.4"
+python-dotenv = "^1.1.0"
+pydantic = "^2.11.3"
+sparqlwrapper = "^2.0.0"
+ipykernel = "^6.29.5"
+jupyter = "^1.1.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
