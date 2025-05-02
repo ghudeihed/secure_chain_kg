@@ -1,0 +1,17 @@
+services:
+  fuseki:
+    build:
+      context: ./fuseki
+    ports:
+      - "3030:3030"
+    volumes:
+      - ./fuseki/databases:/fuseki/databases
+    # environment:
+    #   - ADMIN_PASSWORD=admin123
+    restart: unless-stopped
+    networks:
+      - secure_chain_network 
+
+networks:
+  secure_chain_network:
+    driver: bridge
