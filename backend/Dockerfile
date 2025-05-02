@@ -14,7 +14,7 @@ ENV POETRY_VERSION=1.8.3
 RUN pip install --no-cache-dir poetry==${POETRY_VERSION}
 
 # Copy Poetry files for dependency installation
-COPY pyproject.toml poetry.lock ./
+COPY backend/pyproject.toml backend/poetry.lock ./
 
 # Install dependencies with Poetry
 # --no-dev excludes dev dependencies (e.g., pytest)

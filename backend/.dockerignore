@@ -9,8 +9,6 @@ venv/
 app.log
 tests/
 pytest.ini
-poetry.lock
-requirements.txt
 README.md
 .git
 .gitignore
