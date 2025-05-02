@@ -59,7 +59,7 @@ class SparqlClient:
             sparql = SPARQLWrapper(self.endpoint)
             sparql.setQuery(query)
             sparql.setReturnFormat(JSON)
-            sparql.setTimeout(30)  # Add timeout
+            sparql.setTimeout(30)
             result = sparql.query().convert()
             
             # Cache result
@@ -72,7 +72,7 @@ class SparqlClient:
         except (EndPointNotFound, ConnectionError) as e:
             logger.error(f"SPARQL endpoint error: {e}")
             logger.debug(f"Failed query: {query}")
-            raise SparqlClientError(f"Endpoint error: {e}")
+            raise SparqlClientError(f"Cannot connect to SPARQL endpoint {self.endpoint}. Ensure the server is running.")
         except Exception as e:
             logger.error(f"Unexpected SPARQL query error: {e}")
             logger.debug(f"Failed query: {query}")

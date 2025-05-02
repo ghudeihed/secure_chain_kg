@@ -1,5 +1,10 @@
 import logging
 import uuid
+import datetime
+from typing import Dict, List, Any, Optional
+from pydantic import BaseModel, Field
+from services.sparql_client import SparqlClient, SparqlClientError
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +27,7 @@ WHERE {
   ?version <https://w3id.org/secure-chain/dependsOn> ?depVersion .
   ?depVersion <https://w3id.org/secure-chain/versionName> ?depVersionName .
   ?dependency <https://w3id.org/secure-chain/hasSoftwareVersion> ?depVersion .
+  ?dependency <http://schema.org/name> ?depName .
 }
 """
 
@@ -37,64 +43,123 @@ WHERE {
 }
 """
 
+class Vulnerability(BaseModel):
+    id: str
+    uri: str
+    type: Optional[str] = None
+
+class Dependency(BaseModel):
+    name: str
+    version_id: str
+    dependencies: List["Dependency"] = Field(default_factory=list)
+    vulnerabilities: List[Vulnerability] = Field(default_factory=list)
+
+class Version(BaseModel):
+    version_id: str
+    dependencies: List[Dependency] = Field(default_factory=list)
+    vulnerabilities: List[Vulnerability] = Field(default_factory=list)
+
+class Sbom(BaseModel):
+    name: str
+    versions: List[Version] = Field(default_factory=list)
+    generated_at: str
+    tool: Dict[str, str]
+
 class SbomGenerator:
-    """Generator for Software Bill of Materials (SBOM) based on SPARQL queries."""
+    """Generator for Software Bill of Materials (SBOM) based on SPARQL queries.
+
+    Args:
+        sparql_client (SparqlClient): SPARQL client for querying the knowledge graph.
+        max_depth (int): Maximum recursion depth for dependencies (default: from config).
+    """
     
-    def __init__(self, sparql_client):
+    def __init__(self, sparql_client: SparqlClient, max_depth: int = settings.SBOM_MAX_DEPTH):
         self.client = sparql_client
-        self.visited = set()  # For circular dependency detection
+        self.max_depth = max_depth
+        self.visited: set[str] = set()  # For circular dependency detection
         
-    def generate_sbom(self, software_name):
-        """Generate SBOM for a software component."""
+    def generate_sbom(self, software_name: str) -> Sbom:
+        """Generate SBOM for a software component.
+
+        Args:
+            software_name (str): Name of the software component.
+
+        Returns:
+            Sbom: Pydantic model containing the SBOM structure.
+
+        Raises:
+            ValueError: If software_name is invalid.
+            SparqlClientError: If SPARQL queries fail.
+        """
+        if not self._is_valid_software_name(software_name):
+            raise ValueError(f"Invalid software name: {software_name}")
+            
         logger.info(f"Generating SBOM for software: {software_name}")
+        self.visited.clear()  # Reset visited set for new SBOM
         
-        # Create root SBOM structure
-        sbom = {
-            "name": software_name,
-            "versions": self._get_software_versions(software_name),
-            "generated_at": self._get_timestamp(),
-            "tool": {
-                "name": "Secure-Chain SBOM Generator",
-                "version": "1.0.0"
-            }
-        }
-        
-        # Process each version
-        for version in sbom["versions"]:
-            # Get dependencies recursively
-            dependencies = self._get_dependencies(software_name, version["version_id"])
-            version["dependencies"] = dependencies
+        try:
+            sbom = Sbom(
+                name=software_name,
+                versions=self._get_software_versions(software_name),
+                generated_at=self._get_timestamp(),
+                tool={
+                    "name": settings.SBOM_TOOL_NAME,
+                    "version": settings.SBOM_TOOL_VERSION
+                }
+            )
             
-            # Get vulnerabilities for this version
-            vulnerabilities = self._get_vulnerabilities(software_name, version["version_id"])
-            version["vulnerabilities"] = vulnerabilities
-            
-        return sbom
+            for version in sbom.versions:
+                version.dependencies = self._get_dependencies(software_name, version.version_id)
+                version.vulnerabilities = self._get_vulnerabilities(software_name, version.version_id)
+                
+            return sbom
+        except SparqlClientError as e:
+            logger.error(f"Failed to generate SBOM: {e}")
+            raise
     
-    def _get_software_versions(self, software_name):
-        """Get all versions for a software component."""
+    def _get_software_versions(self, software_name: str) -> List[Version]:
+        """Get all versions for a software component.
+
+        Args:
+            software_name (str): Software name.
+
+        Returns:
+            List[Version]: List of version models.
+        """
         logger.debug(f"Getting versions for software: {software_name}")
         
-        query_result = self.client.query(SOFTWARE_VERSION_QUERY, {"software_name": software_name})
-        versions = []
-        
-        for result in query_result["results"]["bindings"]:
-            version_id = result["version_id"]["value"]
-            versions.append({
-                "version_id": version_id
-            })
+        try:
+            query_result = self.client.query(SOFTWARE_VERSION_QUERY, {"software_name": software_name})
+            versions = []
             
-        logger.debug(f"Found {len(versions)} versions for software: {software_name}")
-        return versions
+            for result in query_result["results"]["bindings"]:
+                version_id = result.get("version_id", {}).get("value")
+                if not version_id:
+                    logger.warning(f"Missing version_id in result for {software_name}")
+                    continue
+                versions.append(Version(version_id=version_id))
+                
+            logger.debug(f"Found {len(versions)} versions for software: {software_name}")
+            return versions
+        except SparqlClientError as e:
+            logger.error(f"Failed to get versions for {software_name}: {e}")
+            raise
     
-    def _get_dependencies(self, software_name, version_id, depth=0, max_depth=10):
-        """Get dependencies for a software version recursively."""
-        # Prevent infinite recursion
-        if depth > max_depth:
+    def _get_dependencies(self, software_name: str, version_id: str, depth: int = 0) -> List[Dependency]:
+        """Get dependencies for a software version recursively.
+
+        Args:
+            software_name (str): Software name.
+            version_id (str): Version identifier.
+            depth (int): Current recursion depth.
+
+        Returns:
+            List[Dependency]: List of dependency models.
+        """
+        if depth > self.max_depth:
             logger.warning(f"Maximum dependency depth reached for {software_name} {version_id}")
             return []
             
-        # Detect circular dependencies
         dep_key = f"{software_name}:{version_id}"
         if dep_key in self.visited:
             logger.debug(f"Circular dependency detected: {dep_key}")
@@ -103,70 +168,92 @@ class SbomGenerator:
         self.visited.add(dep_key)
         logger.debug(f"Getting dependencies for {software_name} {version_id} (depth: {depth})")
         
-        # Query for dependencies
-        dependencies = []
-        query_result = self.client.query(DEPENDENCY_QUERY, {
-            "software_name": software_name,
-            "version_id": version_id
-        })
-        
-        for result in query_result["results"]["bindings"]:
-            dep_uri = result["dependency"]["value"]
-            dep_name = dep_uri.split("/")[-1]  # Extract name from URI
-            dep_version = result["depVersionName"]["value"]
+        try:
+            dependencies = []
+            query_result = self.client.query(DEPENDENCY_QUERY, {
+                "software_name": software_name,
+                "version_id": version_id
+            })
             
-            # Skip if already processed in this branch
-            sub_dep_key = f"{dep_name}:{dep_version}"
-            if sub_dep_key in self.visited:
-                continue
+            for result in query_result["results"]["bindings"]:
+                dep_name = result.get("depName", {}).get("value")
+                dep_version = result.get("depVersionName", {}).get("value")
+                if not (dep_name and dep_version):
+                    logger.warning(f"Missing depName or depVersionName in result for {software_name}")
+                    continue
+                    
+                sub_dep_key = f"{dep_name}:{dep_version}"
+                if sub_dep_key in self.visited:
+                    continue
+                    
+                sub_dependencies = self._get_dependencies(dep_name, dep_version, depth + 1)
+                dependencies.append(Dependency(
+                    name=dep_name,
+                    version_id=dep_version,
+                    dependencies=sub_dependencies,
+                    vulnerabilities=self._get_vulnerabilities(dep_name, dep_version)
+                ))
                 
-            # Recursively get sub-dependencies
-            sub_dependencies = self._get_dependencies(dep_name, dep_version, depth + 1, max_depth)
-            
-            dependency = {
-                "name": dep_name,
-                "version_id": dep_version,
-                "dependencies": sub_dependencies,
-                "vulnerabilities": self._get_vulnerabilities(dep_name, dep_version)
-            }
-            
-            dependencies.append(dependency)
-            
-        # Remove from visited so other branches can include this dependency
-        self.visited.remove(dep_key)
-        
-        return dependencies
+            self.visited.remove(dep_key)
+            return dependencies
+        except SparqlClientError as e:
+            logger.error(f"Failed to get dependencies for {software_name} {version_id}: {e}")
+            raise
     
-    def _get_vulnerabilities(self, software_name, version_id):
-        """Get vulnerabilities for a software version."""
+    def _get_vulnerabilities(self, software_name: str, version_id: str) -> List[Vulnerability]:
+        """Get vulnerabilities for a software version.
+
+        Args:
+            software_name (str): Software name.
+            version_id (str): Version identifier.
+
+        Returns:
+            List[Vulnerability]: List of vulnerability models.
+        """
         logger.debug(f"Getting vulnerabilities for {software_name} {version_id}")
         
-        query_result = self.client.query(VULNERABILITY_QUERY, {
-            "software_name": software_name,
-            "version_id": version_id
-        })
-        
-        vulnerabilities = []
-        for result in query_result["results"]["bindings"]:
-            vuln_uri = result["vulnerability"]["value"]
-            vuln_id = result["vulnId"]["value"]
+        try:
+            query_result = self.client.query(VULNERABILITY_QUERY, {
+                "software_name": software_name,
+                "version_id": version_id
+            })
             
-            vulnerability = {
-                "id": vuln_id,
-                "uri": vuln_uri
-            }
-            
-            # Add vulnerability type if available
-            if "vulnType" in result:
-                vuln_type_uri = result["vulnType"]["value"]
-                vuln_type = vuln_type_uri.split("/")[-1]  # Extract type from URI
-                vulnerability["type"] = vuln_type
+            vulnerabilities = []
+            for result in query_result["results"]["bindings"]:
+                vuln_id = result.get("vulnId", {}).get("value")
+                vuln_uri = result.get("vulnerability", {}).get("value")
+                if not (vuln_id and vuln_uri):
+                    logger.warning(f"Missing vulnId or vulnerability URI for {software_name} {version_id}")
+                    continue
+                    
+                vulnerability = Vulnerability(id=vuln_id, uri=vuln_uri)
+                if "vulnType" in result and result["vulnType"].get("value"):
+                    vuln_type = result["vulnType"]["value"].split("/")[-1]
+                    vulnerability.type = vuln_type
+                    
+                vulnerabilities.append(vulnerability)
                 
-            vulnerabilities.append(vulnerability)
-            
-        return vulnerabilities
+            return vulnerabilities
+        except SparqlClientError as e:
+            logger.error(f"Failed to get vulnerabilities for {software_name} {version_id}: {e}")
+            raise
     
-    def _get_timestamp(self):
-        """Get current timestamp in ISO format."""
-        import datetime
+    def _get_timestamp(self) -> str:
+        """Get current timestamp in ISO format.
+
+        Returns:
+            str: ISO-formatted timestamp.
+        """
         return datetime.datetime.now().isoformat()
+    
+    def _is_valid_software_name(self, software_name: str) -> bool:
+        """Validate software name to prevent injection.
+
+        Args:
+            software_name (str): Software name to validate.
+
+        Returns:
+            bool: True if valid, False otherwise.
+        """
+        import re
+        return bool(software_name and re.match(r'^[a-zA-Z0-9_\-\.\:\/]*$', software_name))

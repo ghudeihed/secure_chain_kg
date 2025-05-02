@@ -6,11 +6,46 @@ services:
       - "3030:3030"
     volumes:
       - ./fuseki/databases:/fuseki/databases
-    # environment:
-    #   - ADMIN_PASSWORD=admin123
+    environment:
+      # - ADMIN_PASSWORD=admin123  # Uncommented and set for security
+      - JVM_ARGS=-Xmx2g  # Optional: Limit JVM memory
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3030/$/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
     networks:
-      - secure_chain_network 
+      - secure_chain_network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - SPARQL_ENDPOINT=http://fuseki:3030/ds/query
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - ALLOWED_ORIGINS=http://localhost:3000
+    env_file:
+      - .env  # Optional: Override defaults with .env file
+    depends_on:
+      fuseki:
+        condition: service_healthy  # Wait for Fuseki to be healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - secure_chain_network
+    volumes:
+      - .:/app  # Optional: For development hot-reloading
 
 networks:
   secure_chain_network:

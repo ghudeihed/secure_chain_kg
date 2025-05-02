@@ -1,5 +1,5 @@
 import pytest
-import hashlib  # Added import
+import hashlib
 from unittest.mock import patch
 from services.sparql_client import SparqlClient, SparqlClientError
 
@@ -28,5 +28,5 @@ def test_query_invalid_param(client):
 def test_query_endpoint_error(client):
     with patch("SPARQLWrapper.SPARQLWrapper.query") as mock_query:
         mock_query.side_effect = ConnectionError("Endpoint unreachable")
-        with pytest.raises(SparqlClientError, match="Endpoint error"):
+        with pytest.raises(SparqlClientError, match="Cannot connect to SPARQL endpoint"):
             client.query("SELECT ?x WHERE { ?x a ?type }")
