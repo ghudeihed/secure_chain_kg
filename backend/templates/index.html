@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline';">
+    <title>SBOM Generator API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+        }
+        a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SBOM Generator API</h1>
+        <p>Welcome to the SBOM Generator API (v1.0.0).</p>
+        <p>This API generates Software Bills of Materials (SBOMs) from a Secure Chain Knowledge Graph.</p>
+        <h2>API Resources</h2>
+        <ul>
+            <li><a href="/docs">Swagger UI Documentation</a> - Interactive API documentation</li>
+            <li><a href="/redoc">ReDoc Documentation</a> - Alternative API documentation</li>
+            <li><a href="/openapi.json">OpenAPI JSON Schema</a> - Raw API specification</li>
+        </ul>
+        <h2>Endpoints</h2>
+        <ul>
+            <li><code>POST /api/sbom/generate</code> - Generate an SBOM for a software component</li>
+            <li><code>GET /health</code> - Check API health status</li>
+        </ul>
+        <p>For more details, explore the documentation links above.</p>
+    </div>
+</body>
+</html>
