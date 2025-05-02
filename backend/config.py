@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 from typing import List
-from pydantic import validator
 import logging
 
 logger = logging.getLogger(__name__)
@@ -9,8 +9,9 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
+    SPARQL_ENDPOINT: str = "http://localhost:3030/ds/query"
 
-    @validator("ALLOWED_ORIGINS", pre=True)
+    @field_validator("ALLOWED_ORIGINS", mode="before")
     def parse_allowed_origins(cls, v):
         if isinstance(v, str) and v:
             return [origin.strip() for origin in v.split(",")]
