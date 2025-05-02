@@ -86,24 +86,9 @@ The system follows a three-tier architecture:
 ## API Endpoints
 
 ```
-GET /api/software/search?name={name}
-- Search for software by name
-
-GET /api/software/{id}/versions
-- Get all versions of a specific software
-
-GET /api/version/{id}/dependencies
-- Get dependencies for a specific software version
-
-GET /api/version/{id}/vulnerabilities
-- Get vulnerabilities for a specific software version
-
 POST /api/sbom/generate
 - Generate SBOM for a given software name
 - Parameters: software_name, format (json/spdx/cyclonedx)
-
-GET /api/sbom/{id}
-- Retrieve a previously generated SBOM
 ```
 
 ## Docker Containerization
