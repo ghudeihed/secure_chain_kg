@@ -42,6 +42,17 @@ services:
     volumes:
       - ./backend:/app
 
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - secure_chain_network
+
 networks:
   secure_chain_network:
     driver: bridge
