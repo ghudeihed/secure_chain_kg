@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import axios from 'axios';
 import qs from 'qs';
 import DependencyGraph from './DependencyGraph';
@@ -16,69 +17,69 @@ const SBOMGenerator = () => {
   const [errors, setErrors] = useState({ json: null, spdx: null, cyclonedx: null });
   const [viewMode, setViewMode] = useState('graph');
 
-  const generateSBOM = async () => {
-    console.log('Submitting:', { softwareName });
-    setLoading(true);
-    setErrors({ json: null, spdx: null, cyclonedx: null });
-    setSbomData({ json: null, spdx: null, cyclonedx: null });
-    setDownloadUrls({ json: null, spdx: null, cyclonedx: null });
+  // Cleanup download URLs to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      Object.values(downloadUrls).forEach((url) => {
+        if (url) URL.revokeObjectURL(url);
+      });
+    };
+  }, [downloadUrls]);
 
+  const generateSBOM = async () => {
     if (!softwareName) {
       setErrors({
-        json: 'Please enter a software name.',
-        spdx: 'Please enter a software name.',
-        cyclonedx: 'Please enter a software name.',
+        json: 'Software name is required.',
+        spdx: 'Software name is required.',
+        cyclonedx: 'Software name is required.',
       });
-      setLoading(false);
       return;
     }
 
+    setLoading(true);
+    setErrors({ json: null, spdx: null, cyclonedx: null });
+    setSbomData({ json: null, spdx: null, cyclonedx: null });
+    setDownloadUrls((prev) => {
+      Object.values(prev).forEach((url) => url && URL.revokeObjectURL(url));
+      return { json: null, spdx: null, cyclonedx: null };
+    });
+
     const formats = ['json', 'spdx', 'cyclonedx'];
     const requests = formats.map((fmt) =>
-      axios.post(
-        `${API_BASE_URL}/api/sbom/generate`,
-        qs.stringify({
-          software_name: softwareName,
-          format: fmt,
-        }),
-        {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-        }
-      ).catch((err) => ({ error: err, format: fmt }))
+      axios
+        .post(
+          `${API_BASE_URL}/api/sbom/generate`,
+          qs.stringify({ software_name: softwareName, format: fmt }),
+          { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+        )
+        .catch((err) => ({ error: err, format: fmt }))
     );
 
     try {
       const responses = await Promise.all(requests);
-      const newSbomData = { json: null, spdx: null, cyclonedx: null };
-      const newDownloadUrls = { json: null, spdx: null, cyclonedx: null };
-      const newErrors = { json: null, spdx: null, cyclonedx: null };
+      const newSbomData = {};
+      const newDownloadUrls = {};
+      const newErrors = {};
 
       responses.forEach((response, index) => {
         const fmt = formats[index];
         if (response.error) {
-          console.error(`Error generating SBOM for ${fmt}:`, response.error);
-          let errorMessage = `Error generating ${fmt} SBOM`;
+          let errorMessage = `Failed to generate ${fmt.toUpperCase()} SBOM`;
           if (response.error.response?.data?.detail) {
-            if (Array.isArray(response.error.response.data.detail)) {
-              errorMessage = response.error.response.data.detail
-                .map((e) => `Missing required field: ${e.loc.join('.')}`)
-                .join('; ');
-            } else {
-              errorMessage = response.error.response.data.detail;
-            }
+            errorMessage = Array.isArray(response.error.response.data.detail)
+              ? response.error.response.data.detail
+                  .map((e) => `Missing: ${e.loc.join('.')}`)
+                  .join('; ')
+              : response.error.response.data.detail;
           }
           newErrors[fmt] = errorMessage;
         } else {
-          console.log(`Raw API Response for ${fmt}:`, JSON.stringify(response.data, null, 2));
           newSbomData[fmt] = response.data;
-
-          const fileExtension = fmt === 'json' ? 'json' : fmt === 'spdx' ? 'spdx.json' : 'cyclonedx.json';
-          const blobData = JSON.stringify(response.data, null, 2);
-          const jsonBlob = new Blob([blobData], { type: 'application/json' });
-          const url = URL.createObjectURL(jsonBlob);
-          newDownloadUrls[fmt] = url;
+          const fileExtension = fmt === 'json' ? 'json' : `${fmt}.json`;
+          const blob = new Blob([JSON.stringify(response.data, null, 2)], {
+            type: 'application/json',
+          });
+          newDownloadUrls[fmt] = URL.createObjectURL(blob);
         }
       });
 
@@ -86,11 +87,11 @@ const SBOMGenerator = () => {
       setDownloadUrls(newDownloadUrls);
       setErrors(newErrors);
     } catch (err) {
-      console.error('Unexpected error during SBOM generation:', err);
+      const errorMessage = 'Unexpected error generating SBOMs';
       setErrors({
-        json: 'Unexpected error generating JSON SBOM',
-        spdx: 'Unexpected error generating SPDX SBOM',
-        cyclonedx: 'Unexpected error generating CycloneDX SBOM',
+        json: errorMessage,
+        spdx: errorMessage,
+        cyclonedx: errorMessage,
       });
     } finally {
       setLoading(false);
@@ -102,129 +103,130 @@ const SBOMGenerator = () => {
     generateSBOM();
   };
 
+  const renderErrors = () => {
+    const activeErrors = Object.entries(errors).filter(([, err]) => err);
+    if (!activeErrors.length) return null;
+
+    return (
+      <div className="error-message" role="alert">
+        <h2>Error</h2>
+        {activeErrors.map(([fmt, err]) => (
+          <p key={fmt}>{fmt.toUpperCase()}: {err}</p>
+        ))}
+      </div>
+    );
+  };
+
+  const renderResults = () => {
+    if (!Object.values(sbomData).some((data) => data)) return null;
+
+    return (
+      <div className="results-container">
+        <h2>Results for {sbomData[format]?.name || softwareName}</h2>
+        <div className="result-actions">
+          {Object.entries(downloadUrls).map(([fmt, url]) =>
+            url ? (
+              <a
+                key={fmt}
+                href={url}
+                download={`sbom-${sbomData[fmt]?.name || softwareName}-${fmt}.json`}
+                className={`download-button ${fmt}-download`}
+              >
+                Download {fmt.toUpperCase()}
+              </a>
+            ) : null
+          )}
+          <button
+            className="toggle-view-button"
+            onClick={() => setViewMode(viewMode === 'graph' ? 'tree' : 'graph')}
+            aria-label={`Switch to ${viewMode === 'graph' ? 'Tree' : 'Graph'} view`}
+          >
+            Switch to {viewMode === 'graph' ? 'Tree' : 'Graph'} View
+          </button>
+        </div>
+        <div className="visualization-container">
+          <div className="visualization-panel">
+            <h3>{viewMode === 'graph' ? 'Dependency Graph' : 'Tree View'}</h3>
+            {sbomData[format] ? (
+              viewMode === 'graph' ? (
+                <>
+                  <DependencyGraph data={sbomData[format]} format={format} />
+                  <p className="visualization-help">
+                    * Red nodes indicate components with vulnerabilities
+                  </p>
+                </>
+              ) : (
+                <IndentedTreeView data={sbomData[format]} format={format} />
+              )
+            ) : (
+              <p>No data available for {format.toUpperCase()} format</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="sbom-generator">
       <header className="app-header">
         <h1>SBOM Construction Tool</h1>
-        <p>Generate Software Bill of Materials from the Secure Chain Knowledge Graph</p>
+        <p>Generate Software Bill of Materials</p>
       </header>
       <div className="main-content">
         <div className="form-container">
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} aria-labelledby="form-title">
+            <h2 id="form-title" className="visually-hidden">
+              SBOM Generation Form
+            </h2>
             <div className="form-group">
               <label htmlFor="software-name">Software Name:</label>
               <input
                 id="software-name"
                 type="text"
                 value={softwareName}
-                onChange={(e) => {
-                  console.log('Software Name:', e.target.value);
-                  setSoftwareName(e.target.value);
-                }}
-                placeholder="Enter software name (e.g., libxml2)"
+                onChange={(e) => setSoftwareName(e.target.value)}
+                placeholder="e.g., libxml2"
                 required
+                aria-required="true"
               />
             </div>
-            {/* <div className="form-group">
-              <label htmlFor="format">Display Format:</label>
-              <select
-                id="format"
-                value={format}
-                onChange={(e) => {
-                  console.log('Format:', e.target.value);
-                  setFormat(e.target.value);
-                }}
-              >
-                <option value="json">JSON</option>
-                <option value="spdx">SPDX</option>
-                <option value="cyclonedx">CycloneDX</option>
-              </select>
-            </div> */}
             <button
               type="submit"
               className="generate-button"
-              disabled={!softwareName || loading}
+              disabled={loading || !softwareName}
+              aria-busy={loading}
             >
               {loading ? 'Generating...' : 'Generate SBOMs'}
             </button>
           </form>
         </div>
-        {Object.values(errors).some((err) => err) && (
-          <div className="error-message">
-            <h2>Error</h2>
-            {errors.json && <p>JSON: {errors.json}</p>}
-            {errors.spdx && <p>SPDX: {errors.spdx}</p>}
-            {errors.cyclonedx && <p>CycloneDX: {errors.cyclonedx}</p>}
-          </div>
-        )}
-        {Object.values(sbomData).some((data) => data) && (
-          <div className="results-container">
-            <h2>Results for {sbomData[format]?.name || softwareName}</h2>
-            <div className="result-actions">
-              {downloadUrls.json && (
-                <a
-                  href={downloadUrls.json}
-                  download={`sbom-${sbomData.json?.name || softwareName}-json.json`}
-                  className="download-button json-download"
-                >
-                  Download JSON
-                </a>
-              )}
-              {downloadUrls.spdx && (
-                <a
-                  href={downloadUrls.spdx}
-                  download={`sbom-${sbomData.spdx?.name || softwareName}-spdx.json`}
-                  className="download-button spdx-download"
-                >
-                  Download SPDX
-                </a>
-              )}
-              {downloadUrls.cyclonedx && (
-                <a
-                  href={downloadUrls.cyclonedx}
-                  download={`sbom-${sbomData.cyclonedx?.name || softwareName}-cyclonedx.json`}
-                  className="download-button cyclonedx-download"
-                >
-                  Download CycloneDX
-                </a>
-              )}
-              <button
-                className="toggle-view-button"
-                onClick={() => setViewMode(viewMode === 'graph' ? 'tree' : 'graph')}
-              >
-                Switch to {viewMode === 'graph' ? 'Indented Tree' : 'Graph'} View
-              </button>
-            </div>
-            <div className="visualization-container">
-              <div className="visualization-panel">
-                <h3>{viewMode === 'graph' ? 'Dependency Graph' : 'Indented Tree View'}</h3>
-                {sbomData[format] ? (
-                  viewMode === 'graph' ? (
-                    <>
-                      <DependencyGraph data={sbomData[format]} format={format} />
-                      <p className="visualization-help">* Red nodes indicate components with vulnerabilities</p>
-                    </>
-                  ) : (
-                    <IndentedTreeView data={sbomData[format]} format={format} />
-                  )
-                ) : (
-                  <p>No data available for {format} format</p>
-                )}
-              </div>
-            </div>
-            {/* <div className="data-container">
-              <h3>SBOM Data ({format})</h3>
-              {sbomData[format] ? (
-                <pre className="sbom-json">{JSON.stringify(sbomData[format], null, 2)}</pre>
-              ) : (
-                <p>No data available for {format} format</p>
-              )}
-            </div> */}
-          </div>
-        )}
+        {renderErrors()}
+        {renderResults()}
       </div>
     </div>
   );
+};
+
+SBOMGenerator.propTypes = {
+  softwareName: PropTypes.string,
+  format: PropTypes.oneOf(['json', 'spdx', 'cyclonedx']),
+  sbomData: PropTypes.shape({
+    json: PropTypes.object,
+    spdx: PropTypes.object,
+    cyclonedx: PropTypes.object,
+  }),
+  downloadUrls: PropTypes.shape({
+    json: PropTypes.string,
+    spdx: PropTypes.string,
+    cyclonedx: PropTypes.string,
+  }),
+  errors: PropTypes.shape({
+    json: PropTypes.string,
+    spdx: PropTypes.string,
+    cyclonedx: PropTypes.string,
+  }),
+  viewMode: PropTypes.oneOf(['graph', 'tree']),
 };
 
 export default SBOMGenerator;
