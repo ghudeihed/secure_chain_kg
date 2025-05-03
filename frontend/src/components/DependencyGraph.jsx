@@ -5,7 +5,6 @@ import * as d3 from 'd3';
 import { parseSbomData } from '../utils/sbomParser';
 import './DependencyGraph.css';
 
-// Register the dagre layout
 cytoscape.use(dagre);
 
 const DependencyGraph = ({ data, format }) => {
@@ -14,251 +13,174 @@ const DependencyGraph = ({ data, format }) => {
   const [warning, setWarning] = useState(null);
   const [error, setError] = useState(null);
 
-  // Normalize SBOM data
   const normalizedData = useMemo(() => {
     try {
-      if (!data) {
-        throw new Error('No SBOM data provided');
-      }
+      if (!data) throw new Error('No SBOM data provided');
       const parsed = parseSbomData(data, format);
-      console.log(`Normalized Data for ${format}:`, JSON.stringify(parsed, null, 2));
       return parsed;
-    } catch (error) {
-      console.error(`Error parsing SBOM data for ${format}:`, error);
-      setError(`Failed to parse ${format} SBOM: ${error.message}`);
+    } catch (err) {
+      setError(`Failed to parse ${format} SBOM: ${err.message}`);
       return null;
     }
   }, [data, format]);
 
   useEffect(() => {
     if (!normalizedData || !containerRef.current) {
-      console.log('Missing data or container:', { data: normalizedData, container: containerRef.current });
-      setError(normalizedData ? 'No container available for rendering' : `Invalid ${format} data`);
+      setError(normalizedData ? 'No container available' : `Invalid ${format} data`);
       return;
     }
 
-    // Log initial container dimensions
-    console.log('Initial container dimensions:', {
-      width: containerRef.current.offsetWidth,
-      height: containerRef.current.offsetHeight,
-    });
+    const elements = convertSbomToGraphElements(normalizedData);
+    const nodes = elements.filter(el => el.data.id && !el.data.source);
+    const edges = elements.filter(el => el.data.source && el.data.target);
 
-    // Initialize Cytoscape
-    const initializeCytoscape = () => {
-      try {
-        const elements = convertSbomToGraphElements(normalizedData);
-        console.log('Graph elements count:', elements.length, 'Elements:', JSON.stringify(elements, null, 2));
+    if (elements.length === 0) {
+      setError(`No graph elements generated from ${format} SBOM`);
+      return;
+    }
+    if (nodes.length > 1 && edges.length === 0) {
+      setWarning(`No edges found in ${format} SBOM. Check "DEPENDS_ON" relationships.`);
+    }
+    if (elements.length === 1) {
+      setWarning(`Only one node found. ${format} SBOM may be incomplete.`);
+    }
 
-        // Check for nodes and edges
-        const nodes = elements.filter((el) => el.data.id && !el.data.source);
-        const edges = elements.filter((el) => el.data.source && el.data.target);
-        console.log(`Nodes: ${nodes.length}, Edges: ${edges.length}`);
+    const maxVulns = Math.max(...nodes.map(n => (n.data.vulnerabilities || []).length), 1);
+    const vulnColor = d3.scaleSequential().domain([0, maxVulns]).interpolator(d3.interpolateReds);
 
-        // Calculate max vulnerabilities for color scale
-        const maxVulnerabilities = Math.max(
-          ...elements
-            .filter((el) => el.data.id && !el.data.source)
-            .map((el) => (el.data.vulnerabilities || []).length),
-          1 // Ensure at least 1 to avoid division by zero
-        );
-        console.log(`Max vulnerabilities for color scale: ${maxVulnerabilities}`);
-
-        // Create color scale for vulnerabilities
-        const vulnColorScale = d3.scaleSequential()
-          .domain([0, maxVulnerabilities])
-          .interpolator(d3.interpolateReds);
-
-        if (elements.length === 0) {
-          setError(`No graph elements generated from ${format} SBOM data`);
-          return;
-        }
-        if (nodes.length > 1 && edges.length === 0) {
-          setWarning(`No relationships (edges) generated for ${format} SBOM. Check the SBOM data for missing or incorrect DEPENDS_ON relationships.`);
-        }
-        if (elements.length === 1) {
-          setWarning(`Only one node generated for ${format} SBOM. The data may be incomplete or incorrectly formatted.`);
-        }
-
-        cyRef.current = cytoscape({
-          container: containerRef.current,
-          elements: elements,
-          style: [
-            {
-              selector: 'node',
-              style: {
-                'background-color': (ele) => {
-                  const vulnCount = (ele.data('vulnerabilities') || []).length;
-                  return vulnCount > 0 ? vulnColorScale(vulnCount) : '#6FB1FC';
-                },
-                'border-width': 2,
-                'border-color': (ele) => {
-                  const vulnCount = (ele.data('vulnerabilities') || []).length;
-                  return vulnCount > 0 ? d3.color(vulnColorScale(vulnCount)).darker(1).toString() : '#2980B9';
-                },
-                'label': 'data(label)',
-                'color': '#333',
-                'text-valign': 'center',
-                'text-halign': 'center',
-                'font-size': '14px',
-                'text-wrap': 'wrap',
-                'text-max-width': '120px',
-                'width': 'label',
-                'height': 'label',
-                'padding': '12px',
-              },
-            },
-            {
-              selector: 'edge',
-              style: {
-                'width': 2,
-                'line-color': '#95A5A6',
-                'target-arrow-color': '#95A5A6',
-                'target-arrow-shape': 'triangle',
-                'curve-style': 'bezier',
-                'arrow-scale': 0.8,
-              },
-            },
-            {
-              selector: 'node.root',
-              style: {
-                'background-color': '#2ECC71',
-                'border-color': '#27AE60',
-                'border-width': 3,
-              },
-            },
-          ],
-          layout: {
-            name: elements.length > 50 ? 'cose' : 'dagre',
-            rankDir: 'LR',
-            nodeSep: 100,
-            rankSep: 120,
-            padding: 60,
-            animate: true,
+    const styles = [
+      {
+        selector: 'node',
+        style: {
+          'background-color': ele => {
+            const count = (ele.data('vulnerabilities') || []).length;
+            return count > 0 ? vulnColor(count) : '#6FB1FC';
           },
-          zoom: 1,
-          minZoom: 0.2,
-          maxZoom: 3,
-          wheelSensitivity: 0.2,
+          'border-color': ele => {
+            const count = (ele.data('vulnerabilities') || []).length;
+            return count > 0 ? d3.color(vulnColor(count)).darker(1).toString() : '#2980B9';
+          },
+          'border-width': 2,
+          'label': 'data(label)',
+          'color': '#333',
+          'text-valign': 'center',
+          'text-halign': 'center',
+          'font-size': '14px',
+          'text-wrap': 'wrap',
+          'text-max-width': '120px',
+          'padding': '12px',
+          'width': 'label',
+          'height': 'label',
+        },
+      },
+      {
+        selector: 'edge',
+        style: {
+          'width': 2,
+          'line-color': '#95A5A6',
+          'target-arrow-color': '#95A5A6',
+          'target-arrow-shape': 'triangle',
+          'curve-style': 'bezier',
+          'arrow-scale': 0.8,
+        },
+      },
+      {
+        selector: 'node.root',
+        style: {
+          'background-color': '#2ECC71',
+          'border-color': '#27AE60',
+          'border-width': 3,
+        },
+      },
+    ];
+
+    const initCytoscape = () => {
+      cyRef.current = cytoscape({
+        container: containerRef.current,
+        elements,
+        style: styles,
+        layout: {
+          name: elements.length > 50 ? 'cose' : 'dagre',
+          rankDir: 'LR',
+          nodeSep: 100,
+          rankSep: 120,
+          padding: 60,
+          animate: true,
+        },
+        zoom: 1,
+        minZoom: 0.2,
+        maxZoom: 3,
+        wheelSensitivity: 0.2,
+      });
+
+      cyRef.current.on('tap', 'node', evt => {
+        cyRef.current.animate({
+          fit: { eles: evt.target, padding: 100 },
+          duration: 300,
         });
+      });
 
-        cyRef.current.panningEnabled(true);
-        cyRef.current.userPanningEnabled(true);
+      cyRef.current.on('mouseover', 'node', evt => showTooltip(evt.target));
+      cyRef.current.on('mouseout', 'node', hideTooltips);
 
-        // Handle node tap to zoom
-        cyRef.current.on('tap', 'node', function (evt) {
-          const node = evt.target;
-          cyRef.current.animate({
-            fit: { eles: node, padding: 100 },
-            duration: 300,
-          });
-        });
-
-        // Handle node hover to show tooltip
-        cyRef.current.on('mouseover', 'node', function (evt) {
-          const node = evt.target;
-          const vulnerabilities = node.data('vulnerabilities') || [];
-          if (vulnerabilities.length > 0) {
-            const position = node.renderedPosition();
-            const canvas = containerRef.current;
-            const tooltip = document.createElement('div');
-            tooltip.className = 'graph-tooltip';
-            tooltip.style.position = 'absolute';
-            tooltip.style.left = `${position.x + canvas.offsetLeft + 10}px`;
-            tooltip.style.top = `${position.y + canvas.offsetTop + 10}px`;
-
-            tooltip.innerHTML = `
-              <div class="tooltip-content">
-                <strong>${vulnerabilities.length} Vulnerabilities:</strong>
-                <ul>
-                  ${vulnerabilities.slice(0, 10).map(v => `<li>${v.id}</li>`).join('')}
-                  ${vulnerabilities.length > 10 ? `<li>... and ${vulnerabilities.length - 10} more</li>` : ''}
-                </ul>
-              </div>
-            `;
-            canvas.appendChild(tooltip);
-          }
-        });
-
-        cyRef.current.on('mouseout', 'node', function () {
-          const tooltips = containerRef.current.querySelectorAll('.graph-tooltip');
-          tooltips.forEach(tooltip => tooltip.remove());
-        });
-
-        cyRef.current.on('render', () => {
-          console.log('Cytoscape rendered, canvas size:', {
-            width: cyRef.current.width(),
-            height: cyRef.current.height(),
-          });
-          // Log node styles for debugging
-          elements
-            .filter((el) => el.data.id && !el.data.source)
-            .forEach((el) => {
-              console.log(`Node ${el.data.id}: Classes=${el.classes}, Vulnerabilities=${(el.data.vulnerabilities || []).length}`);
-            });
-        });
-
-        cyRef.current.resize();
-        cyRef.current.fit();
-
-        setError(null);
-      } catch (error) {
-        console.error(`Error initializing Cytoscape for ${format}:`, error);
-        setError(`Failed to initialize graph for ${format}: ${error.message}`);
-      }
+      cyRef.current.resize();
+      cyRef.current.fit();
     };
 
-    // Retry initialization if container height is zero
-    const attemptInitialization = () => {
+    const showTooltip = (node) => {
+      const vulnerabilities = node.data('vulnerabilities') || [];
+      if (!vulnerabilities.length) return;
+
+      const canvas = containerRef.current;
+      const position = node.renderedPosition();
+      const tooltip = document.createElement('div');
+      tooltip.className = 'graph-tooltip';
+      tooltip.style.left = `${position.x + canvas.offsetLeft + 10}px`;
+      tooltip.style.top = `${position.y + canvas.offsetTop + 10}px`;
+      tooltip.innerHTML = `
+        <div class="tooltip-content">
+          <strong>${vulnerabilities.length} Vulnerabilities:</strong>
+          <ul>
+            ${vulnerabilities.slice(0, 10).map(v => `<li>${v.id}</li>`).join('')}
+            ${vulnerabilities.length > 10 ? `<li>...and ${vulnerabilities.length - 10} more</li>` : ''}
+          </ul>
+        </div>
+      `;
+      tooltip.style.position = 'absolute';
+      canvas.appendChild(tooltip);
+    };
+
+    const hideTooltips = () => {
+      containerRef.current.querySelectorAll('.graph-tooltip').forEach(t => t.remove());
+    };
+
+    const timeout = setTimeout(() => {
       if (containerRef.current.offsetHeight === 0) {
-        console.log('Container height is zero, retrying in 100ms');
-        setTimeout(attemptInitialization, 100);
+        setTimeout(initCytoscape, 100);
       } else {
-        initializeCytoscape();
+        initCytoscape();
       }
-    };
+    }, 100);
 
-    // Start initialization
-    const timeout = setTimeout(attemptInitialization, 100);
-
-    // Resize observer to handle dynamic container changes
-    const resizeObserver = new ResizeObserver((entries) => {
-      if (cyRef.current && entries[0].contentRect.height > 0) {
-        console.log('Container resized:', entries[0].contentRect);
+    const resizeObserver = new ResizeObserver(([entry]) => {
+      if (cyRef.current && entry.contentRect.height > 0) {
         cyRef.current.resize();
         cyRef.current.fit();
       }
     });
+
     resizeObserver.observe(containerRef.current);
 
     return () => {
       clearTimeout(timeout);
       resizeObserver.disconnect();
-      if (cyRef.current) {
-        cyRef.current.destroy();
-      }
+      cyRef.current?.destroy();
     };
   }, [normalizedData, format]);
 
-  const resetZoom = () => {
-    if (cyRef.current) {
-      cyRef.current.animate({
-        fit: { padding: 60 },
-        duration: 300,
-      });
-    }
-  };
-
-  const zoomIn = () => {
-    if (cyRef.current) {
-      cyRef.current.zoom(cyRef.current.zoom() * 1.2);
-    }
-  };
-
-  const zoomOut = () => {
-    if (cyRef.current) {
-      cyRef.current.zoom(cyRef.current.zoom() / 1.2);
-    }
-  };
+  const zoomIn = () => cyRef.current?.zoom(cyRef.current.zoom() * 1.2);
+  const zoomOut = () => cyRef.current?.zoom(cyRef.current.zoom() / 1.2);
+  const resetZoom = () => cyRef.current?.animate({ fit: { padding: 60 }, duration: 300 });
 
   return (
     <div className="dependency-graph-wrapper">
@@ -270,100 +192,78 @@ const DependencyGraph = ({ data, format }) => {
         </div>
         {warning && <div className="graph-warning">{warning}</div>}
         {error && <div className="graph-error">{error}</div>}
-        <div ref={containerRef} className="dependency-graph"></div>
+        <div ref={containerRef} className="dependency-graph" />
       </div>
-      <div className="graph-legend">
-        <div className="legend-item">
-          <div className="legend-color" style={{ backgroundColor: '#2ECC71' }}></div>
-          <div className="legend-label">Root Component</div>
-        </div>
-        <div className="legend-item">
-          <div className="legend-color" style={{ backgroundColor: '#6FB1FC' }}></div>
-          <div className="legend-label">No Vulnerabilities</div>
-        </div>
-        <div className="legend-item">
-          <div className="legend-color" style={{ backgroundColor: '#FFCCCC' }}></div>
-          <div className="legend-label">Low Vulnerabilities</div>
-        </div>
-        <div className="legend-item">
-          <div className="legend-color" style={{ backgroundColor: '#8B0000' }}></div>
-          <div className="legend-label">High Vulnerabilities</div>
-        </div>
-      </div>
+      <GraphLegend />
     </div>
   );
 };
 
-// Function to convert normalized SBOM data to Cytoscape elements
+const GraphLegend = () => (
+  <div className="graph-legend">
+    {[
+      { color: '#2ECC71', label: 'Root Component' },
+      { color: '#6FB1FC', label: 'No Vulnerabilities' },
+      { color: '#FFCCCC', label: 'Low Vulnerabilities' },
+      { color: '#8B0000', label: 'High Vulnerabilities' },
+    ].map(({ color, label }) => (
+      <div className="legend-item" key={label}>
+        <div className="legend-color" style={{ backgroundColor: color }} />
+        <div className="legend-label">{label}</div>
+      </div>
+    ))}
+  </div>
+);
+
 const convertSbomToGraphElements = (sbomData) => {
   const elements = [];
-  const processedNodes = new Set();
+  const seen = new Set();
 
-  if (!sbomData?.name || !Array.isArray(sbomData.versions)) {
-    console.error(`Invalid SBOM data structure for ${sbomData?.format || 'unknown'}:`, sbomData);
-    return elements;
-  }
+  if (!sbomData?.name || !Array.isArray(sbomData.versions)) return elements;
 
-  // Sort versions to select the latest as the root (assuming version_id is comparable, e.g., "1.1.1" > "1.0.0")
-  const sortedVersions = [...sbomData.versions].sort((a, b) => {
-    return b.version_id.localeCompare(a.version_id, undefined, { numeric: true });
-  });
+  const sorted = [...sbomData.versions].sort((a, b) =>
+    b.version_id.localeCompare(a.version_id, undefined, { numeric: true })
+  );
 
-  // Assign root class only to the latest version
-  sortedVersions.forEach((version, index) => {
-    const nodeId = `${sbomData.name}-${version.version_id}`;
-    const isRoot = index === 0; // Only the first (latest) version is root
-    elements.push({
+  sorted.forEach((version, idx) => {
+    const id = `${sbomData.name}-${version.version_id}`;
+    const node = {
       data: {
-        id: nodeId,
+        id,
         label: `${sbomData.name}\n${version.version_id}`,
-        hasVulnerabilities: version.vulnerabilities && version.vulnerabilities.length > 0,
         vulnerabilities: version.vulnerabilities || [],
       },
-      classes: `${isRoot ? 'root' : ''} ${version.vulnerabilities && version.vulnerabilities.length > 0 ? 'vulnerable' : ''}`.trim(),
-    });
-    processedNodes.add(nodeId);
+      classes: `${idx === 0 ? 'root' : ''} ${version.vulnerabilities?.length ? 'vulnerable' : ''}`.trim(),
+    };
 
-    if (version.dependencies) {
-      processVersion(version, nodeId, elements, processedNodes);
-    }
+    elements.push(node);
+    seen.add(id);
+
+    version.dependencies?.forEach(dep => processDependency(dep, id, elements, seen));
   });
 
-  console.log('Generated graph elements:', JSON.stringify(elements, null, 2));
   return elements;
 };
 
-const processVersion = (version, parentId, elements, processedNodes) => {
-  if (!version.dependencies) return;
-
-  for (const dependency of version.dependencies) {
-    const nodeId = `${dependency.name}-${dependency.version_id}`;
-    if (!processedNodes.has(nodeId)) {
-      elements.push({
-        data: {
-          id: nodeId,
-          label: `${dependency.name}\n${dependency.version_id}`,
-          hasVulnerabilities: dependency.vulnerabilities && dependency.vulnerabilities.length > 0,
-          vulnerabilities: dependency.vulnerabilities || [],
-        },
-        classes: dependency.vulnerabilities && dependency.vulnerabilities.length > 0 ? 'vulnerable' : '',
-      });
-      processedNodes.add(nodeId);
-
-      if (dependency.dependencies) {
-        processVersion(dependency, nodeId, elements, processedNodes);
-      }
-    }
-
-    const edgeId = `${parentId}-${nodeId}`;
+const processDependency = (dep, parentId, elements, seen) => {
+  const depId = `${dep.name}-${dep.version_id}`;
+  if (!seen.has(depId)) {
     elements.push({
       data: {
-        id: edgeId,
-        source: parentId,
-        target: nodeId,
+        id: depId,
+        label: `${dep.name}\n${dep.version_id}`,
+        vulnerabilities: dep.vulnerabilities || [],
       },
+      classes: dep.vulnerabilities?.length ? 'vulnerable' : '',
     });
+    seen.add(depId);
+
+    dep.dependencies?.forEach(child => processDependency(child, depId, elements, seen));
   }
+
+  elements.push({
+    data: { id: `${parentId}-${depId}`, source: parentId, target: depId },
+  });
 };
 
 export default DependencyGraph;
