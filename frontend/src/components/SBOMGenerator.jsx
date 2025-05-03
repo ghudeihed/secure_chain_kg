@@ -125,7 +125,7 @@ const SBOMGenerator = () => {
                 required
               />
             </div>
-            <div className="form-group">
+            {/* <div className="form-group">
               <label htmlFor="format">Display Format:</label>
               <select
                 id="format"
@@ -139,7 +139,7 @@ const SBOMGenerator = () => {
                 <option value="spdx">SPDX</option>
                 <option value="cyclonedx">CycloneDX</option>
               </select>
-            </div>
+            </div> */}
             <button
               type="submit"
               className="generate-button"
