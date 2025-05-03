@@ -1,93 +1,42 @@
 .indented-tree-wrapper {
-    width: 100%;
-    min-height: 600px;
-    background-color: #f9f9f9;
-    padding: 15px;
-    border-radius: 8px;
-    overflow-y: auto;
-    font-family: monospace;
-    font-size: 14px;
-  }
-  
-  .tree-node {
-    margin-bottom: 8px;
-  }
-  
-  .node-label {
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  
-  .node-label:hover {
-    background-color: #e0e0e0;
-  }
-  
-  .node-label.root {
-    background-color: #2ecc71;
-    color: white;
-    font-weight: bold;
-  }
-  
-  .node-label.vulnerable {
-    background-color: #fadbd8;
-    border: 1px solid #e74c3c;
-  }
-  
-  .toggle-icon {
-    display: inline-block;
-    width: 16px;
-    text-align: center;
-  }
-  
-  .toggle-icon.collapsed::before {
-    content: '▶';
-  }
-  
-  .toggle-icon.expanded::before {
-    content: '▼';
-  }
-  
-  .node-name {
-    flex: 1;
-  }
-  
-  .vulnerability-count {
-    color: #c0392b;
-    font-size: 12px;
-  }
-  
-  .node-children {
-    margin-top: 4px;
-  }
-  
-  .vulnerability-list {
-    margin-left: 20px;
-    margin-top: 4px;
-    font-size: 12px;
-    color: #c0392b;
-  }
-  
-  .vulnerability-list ul {
-    list-style-type: disc;
-    padding-left: 20px;
-  }
-  
-  .vulnerability-list a {
-    color: #3498db;
-    text-decoration: none;
-  }
-  
-  .vulnerability-list a:hover {
-    text-decoration: underline;
-  }
-  
-  .tree-error {
-    color: #c0392b;
-    padding: 15px;
-    background-color: #fadbd8;
-    border-radius: 4px;
-  }
+  font-family: sans-serif;
+}
+
+.tree-node {
+  margin: 4px 0;
+}
+
+.node-label {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.node-label.root {
+  font-weight: bold;
+}
+
+.node-label.vulnerable {
+  color: darkred;
+}
+
+.toggle-icon {
+  width: 20px;
+  display: inline-block;
+  text-align: center;
+}
+
+.toggle-icon.leaf {
+  color: #ccc;
+}
+
+.vulnerability-count {
+  margin-left: 8px;
+  color: red;
+}
+
+.vulnerability-list {
+  margin-left: 24px;
+  padding-left: 16px;
+  border-left: 2px solid #eee;
+}
