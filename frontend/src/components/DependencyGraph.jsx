@@ -181,6 +181,7 @@ const DependencyGraph = forwardRef(({ data, format, focusNodeId }, ref) => {
         animationDuration: 800,
         padding: 50,
         fit: true,
+        nodeDimensionsIncludeLabels: true,
         stop: function() {
           console.log("Final layout finished");
           layoutFinishedRef.current = true;
@@ -283,12 +284,17 @@ const DependencyGraph = forwardRef(({ data, format, focusNodeId }, ref) => {
           'color': '#333',
           'text-valign': 'center',
           'text-halign': 'center',
-          'font-size': '14px',
+          'font-size': '12px',
           'text-wrap': 'wrap',
           'text-max-width': '120px',
           'padding': '12px',
-          'width': 40,
-          'height': 40,
+          'width': 'label',
+          'height': 'label',
+          // 'shape': 'roundrectangle',
+          // 'min-width': '60px',
+          // 'min-height': '40px',
+          // 'text-margin-x': '6px',
+          // 'text-margin-y': '6px',
           'transition-property': 'background-color, border-color, border-width, width, height',
           'transition-duration': '0.3s',
         },
@@ -331,9 +337,9 @@ const DependencyGraph = forwardRef(({ data, format, focusNodeId }, ref) => {
       {
         selector: 'node.focus-pulse',
         style: {
-          'width': 48,
-          'height': 48,
-          'font-size': '16px',
+          'width': ele => Math.max(parseInt(ele.style('width')), 60) * 1.2 + 'px',
+          'height': ele => Math.max(parseInt(ele.style('height')), 40) * 1.2 + 'px',
+          'font-size': '14px',
           'font-weight': 'bold',
           'text-background-opacity': 0.7,
           'text-background-color': '#fff',
