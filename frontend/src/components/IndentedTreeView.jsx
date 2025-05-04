@@ -1,10 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './IndentedTreeView.css';
 
-const IndentedTreeView = ({ data, format }) => {
+const IndentedTreeView = ({ data, format, onNodeClick }) => {
   const [expandedNodes, setExpandedNodes] = useState(new Set());
+  const [hoveredNode, setHoveredNode] = useState(null);
 
-  const toggleNode = (nodeId) => {
+  useEffect(() => {
+    if (data?.versions && data.versions.length > 0) {
+      const rootVersion = data.versions[0];
+      const rootNodeId = `${data.name}-${rootVersion.version_id}`;
+      setExpandedNodes(new Set([rootNodeId]));
+    }
+  }, [data]);
+
+  const toggleNode = (nodeId, event) => {
+    event.stopPropagation();
     setExpandedNodes((prev) => {
       const newSet = new Set(prev);
       newSet.has(nodeId) ? newSet.delete(nodeId) : newSet.add(nodeId);
@@ -12,20 +22,45 @@ const IndentedTreeView = ({ data, format }) => {
     });
   };
 
+  const handleNodeClick = (node, version) => {
+    if (onNodeClick) {
+      onNodeClick(`${node.name}-${version.version_id}`);
+    }
+  };
+
+  const handleMouseEnter = (nodeId) => {
+    setHoveredNode(nodeId);
+  };
+
+  const handleMouseLeave = () => {
+    setHoveredNode(null);
+  };
+
   const renderNode = (node, version, level = 0, isRoot = false) => {
     const nodeId = `${node.name}-${version.version_id}`;
     const isExpanded = expandedNodes.has(nodeId);
+    const isHovered = hoveredNode === nodeId;
     const { dependencies = [], vulnerabilities = [] } = version;
     const hasChildren = dependencies.length > 0;
     const hasVulnerabilities = vulnerabilities.length > 0;
 
     return (
-      <div key={nodeId} className="tree-node" style={{ paddingLeft: `${level * 20}px` }}>
+      <div 
+        key={nodeId} 
+        className={`tree-node ${isHovered ? 'hovered' : ''}`} 
+        style={{ paddingLeft: `${level * 20}px` }}
+        onClick={() => handleNodeClick(node, version)}
+        onMouseEnter={() => handleMouseEnter(nodeId)}
+        onMouseLeave={handleMouseLeave}
+      >
         <div
           className={`node-label ${isRoot ? 'root' : ''} ${hasVulnerabilities ? 'vulnerable' : ''}`}
-          onClick={() => hasChildren && toggleNode(nodeId)}
         >
-          <span className={`toggle-icon ${hasChildren ? (isExpanded ? 'expanded' : 'collapsed') : 'leaf'}`}>
+          <span 
+            className={`toggle-icon ${hasChildren ? (isExpanded ? 'expanded' : 'collapsed') : 'leaf'}`}
+            onClick={(e) => hasChildren && toggleNode(nodeId, e)}
+            title={hasChildren ? (isExpanded ? "Collapse" : "Expand") : ""}
+          >
             {hasChildren ? (isExpanded ? '▼' : '▶') : '•'}
           </span>
           <span className="node-name">
@@ -33,9 +68,12 @@ const IndentedTreeView = ({ data, format }) => {
           </span>
           {hasVulnerabilities && (
             <span className="vulnerability-count">
-              ({vulnerabilities.length} vulnerabilities)
+              {vulnerabilities.length} {vulnerabilities.length === 1 ? 'vulnerability' : 'vulnerabilities'}
             </span>
           )}
+          <span className="view-in-graph-hint">
+            Click to view in graph
+          </span>
         </div>
 
         {isExpanded && hasChildren && (
@@ -51,12 +89,17 @@ const IndentedTreeView = ({ data, format }) => {
         )}
 
         {isExpanded && hasVulnerabilities && (
-          <ul className="vulnerability-list">
+          <ul className="vulnerability-list" onClick={(e) => e.stopPropagation()}>
             {vulnerabilities.map((vuln) => (
               <li key={vuln.id}>
                 {vuln.id}
                 {vuln.uri && (
-                  <a href={vuln.uri} target="_blank" rel="noopener noreferrer">
+                  <a 
+                    href={vuln.uri} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     (Link)
                   </a>
                 )}
@@ -82,6 +125,10 @@ const IndentedTreeView = ({ data, format }) => {
       {sortedVersions.map((version, index) =>
         renderNode({ name: data.name }, version, 0, index === 0)
       )}
+      <div className="tree-helper">
+        <span>▶ Click triangle icons to expand/collapse</span>
+        <span>• Click on any component to view it in the graph</span>
+      </div>
     </div>
   );
 };

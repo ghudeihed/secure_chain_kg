@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import axios from 'axios';
 import qs from 'qs';
@@ -16,8 +16,10 @@ const SBOMGenerator = () => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ json: null, spdx: null, cyclonedx: null });
   const [viewMode, setViewMode] = useState('graph');
+  const [focusNodeId, setFocusNodeId] = useState(null);
+  const [viewTransitioning, setViewTransitioning] = useState(false);
+  const graphRef = useRef(null);
 
-  // Cleanup download URLs to prevent memory leaks
   useEffect(() => {
     return () => {
       Object.values(downloadUrls).forEach((url) => {
@@ -43,6 +45,7 @@ const SBOMGenerator = () => {
       Object.values(prev).forEach((url) => url && URL.revokeObjectURL(url));
       return { json: null, spdx: null, cyclonedx: null };
     });
+    setFocusNodeId(null);
 
     const formats = ['json', 'spdx', 'cyclonedx'];
     const requests = formats.map((fmt) =>
@@ -103,6 +106,26 @@ const SBOMGenerator = () => {
     generateSBOM();
   };
 
+  const handleNodeClick = (nodeId) => {
+    if (viewTransitioning) {
+      return;
+    }
+    
+    console.log(`Tree node clicked: ${nodeId}`);
+    
+    if (viewMode === 'graph') {
+      setFocusNodeId(nodeId);
+      return;
+    }
+
+    setViewTransitioning(true);
+    setViewMode('graph');
+    setTimeout(() => {
+      setFocusNodeId(nodeId);
+      setViewTransitioning(false);
+    }, 300);
+  };
+
   const renderErrors = () => {
     const activeErrors = Object.entries(errors).filter(([, err]) => err);
     if (!activeErrors.length) return null;
@@ -138,7 +161,19 @@ const SBOMGenerator = () => {
           )}
           <button
             className="toggle-view-button"
-            onClick={() => setViewMode(viewMode === 'graph' ? 'tree' : 'graph')}
+            onClick={() => {
+              if (viewTransitioning) return;
+              
+              setViewTransitioning(true);
+              if (viewMode === 'graph') {
+                setFocusNodeId(null);
+              }
+              setViewMode(viewMode === 'graph' ? 'tree' : 'graph');
+              setTimeout(() => {
+                setViewTransitioning(false);
+              }, 300);
+            }}
+            disabled={viewTransitioning}
             aria-label={`Switch to ${viewMode === 'graph' ? 'Tree' : 'Graph'} view`}
           >
             Switch to {viewMode === 'graph' ? 'Tree' : 'Graph'} View
@@ -150,13 +185,28 @@ const SBOMGenerator = () => {
             {sbomData[format] ? (
               viewMode === 'graph' ? (
                 <>
-                  <DependencyGraph data={sbomData[format]} format={format} />
+                  <DependencyGraph 
+                    data={sbomData[format]} 
+                    format={format} 
+                    focusNodeId={focusNodeId}
+                    ref={graphRef}
+                  />
                   <p className="visualization-help">
                     * Red nodes indicate components with vulnerabilities
+                    {focusNodeId && " • Click 'Clear Focus' to reset view"}
                   </p>
                 </>
               ) : (
-                <IndentedTreeView data={sbomData[format]} format={format} />
+                <>
+                  <IndentedTreeView 
+                    data={sbomData[format]} 
+                    format={format} 
+                    onNodeClick={handleNodeClick}
+                  />
+                  <p className="visualization-help">
+                    * Click on any component to see it in the graph view
+                  </p>
+                </>
               )
             ) : (
               <p>No data available for {format.toUpperCase()} format</p>
@@ -166,6 +216,36 @@ const SBOMGenerator = () => {
       </div>
     );
   };
+
+  useEffect(() => {
+    const styleEl = document.createElement('style');
+    styleEl.innerHTML = `
+      .visualization-panel {
+        border: none !important;
+      }
+      .dependency-graph-container {
+        border: none !important;
+      }
+      .dependency-graph {
+        border: none !important;
+      }
+      
+      /* Define a subtle animation for the focus transition */
+      @keyframes fadeIn {
+        from { opacity: 0.7; }
+        to { opacity: 1; }
+      }
+      
+      .focus-info {
+        animation: fadeIn 0.5s ease-in-out;
+      }
+    `;
+    document.head.appendChild(styleEl);
+    
+    return () => {
+      document.head.removeChild(styleEl);
+    };
+  }, []);
 
   return (
     <div className="sbom-generator">
@@ -227,6 +307,8 @@ SBOMGenerator.propTypes = {
     cyclonedx: PropTypes.string,
   }),
   viewMode: PropTypes.oneOf(['graph', 'tree']),
+  focusNodeId: PropTypes.string,
+  viewTransitioning: PropTypes.bool,
 };
 
 export default SBOMGenerator;

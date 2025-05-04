@@ -1,42 +1,171 @@
 .indented-tree-wrapper {
   font-family: sans-serif;
+  overflow-y: auto;
+  max-height: 550px;
+  padding: 10px 5px;
+  position: relative;
 }
 
 .tree-node {
   margin: 4px 0;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s, transform 0.2s;
+  cursor: pointer;
+  position: relative;
+}
+
+.tree-node:hover,
+.tree-node.hovered {
+  background-color: rgba(52, 152, 219, 0.1);
+  transform: translateX(3px);
+}
+
+.tree-node:active {
+  transform: translateX(5px);
+  background-color: rgba(52, 152, 219, 0.2);
 }
 
 .node-label {
-  cursor: pointer;
   display: flex;
   align-items: center;
+  padding: 4px 8px;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+  position: relative;
 }
 
 .node-label.root {
   font-weight: bold;
+  background-color: rgba(46, 204, 113, 0.1);
+  border-left: 3px solid #2ECC71;
 }
 
 .node-label.vulnerable {
   color: darkred;
+  background-color: rgba(231, 76, 60, 0.1);
+  border-left: 3px solid #E74C3C;
+}
+
+.node-label:hover {
+  transform: translateX(2px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .toggle-icon {
   width: 20px;
-  display: inline-block;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
+  margin-right: 8px;
+  cursor: pointer;
+  transition: transform 0.2s, background-color 0.2s;
+  border-radius: 50%;
 }
 
 .toggle-icon.leaf {
   color: #ccc;
 }
 
+.toggle-icon.expanded {
+  transform: rotate(0deg);
+  background-color: rgba(52, 152, 219, 0.1);
+}
+
+.toggle-icon.collapsed {
+  transform: rotate(-90deg);
+}
+
+.toggle-icon:hover {
+  color: #3498DB;
+  background-color: rgba(52, 152, 219, 0.2);
+}
+
+.node-name {
+  flex: 1;
+  padding: 2px 0;
+}
+
 .vulnerability-count {
   margin-left: 8px;
-  color: red;
+  color: #E74C3C;
+  font-weight: bold;
+  padding: 2px 8px;
+  background-color: rgba(231, 76, 60, 0.1);
+  border-radius: 10px;
+  font-size: 0.85em;
+}
+
+.view-in-graph-hint {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: #3498DB;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75em;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.tree-node:hover .view-in-graph-hint {
+  visibility: visible;
+  opacity: 1;
+  right: 15px;
 }
 
 .vulnerability-list {
   margin-left: 24px;
   padding-left: 16px;
   border-left: 2px solid #eee;
+  font-size: 0.9em;
+  color: #555;
+}
+
+.vulnerability-list li {
+  margin: 4px 0;
+  padding: 2px 0;
+}
+
+.vulnerability-list a {
+  margin-left: 5px;
+  color: #3498DB;
+  text-decoration: none;
+}
+
+.vulnerability-list a:hover {
+  text-decoration: underline;
+}
+
+.tree-error {
+  color: #E74C3C;
+  padding: 10px;
+  border: 1px solid #E74C3C;
+  border-radius: 4px;
+  background-color: rgba(231, 76, 60, 0.1);
+}
+
+.node-children {
+  margin-left: 10px;
+  border-left: 1px dashed #ccc;
+  padding-left: 10px;
+}
+
+.tree-helper {
+  margin-top: 20px;
+  padding: 8px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  border: 1px solid #eee;
+  font-size: 0.85em;
+  color: #666;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
