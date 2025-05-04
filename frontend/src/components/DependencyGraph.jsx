@@ -474,6 +474,22 @@ const DependencyGraph = forwardRef(({ data, format, focusNodeId }, ref) => {
       } else {
         console.log("Node not found:", focusNodeId);
         console.log("Available nodes:", cyRef.current.nodes().map(n => n.id()));
+
+        const allNodes = cyRef.current.nodes();
+        const normalizedTargetId = focusNodeId.toLowerCase();
+        
+        for (let i = 0; i < allNodes.length; i++) {
+          const currentNode = allNodes[i];
+          if (currentNode.id().toLowerCase() === normalizedTargetId) {
+            console.log("Found node with case-insensitive match:", currentNode.id());
+            setTimeout(() => {
+              focusOnNode(currentNode);
+            }, 300);
+            return;
+          }
+        }
+        
+        console.error("Node not found after additional search. Target ID:", focusNodeId);
       }
     } else if (cyRef.current && !focusNodeId && isInitialized) {
       resetNodeHighlighting();
@@ -615,13 +631,17 @@ const convertSbomToGraphElements = (sbomData) => {
     b.version_id.localeCompare(a.version_id, undefined, { numeric: true })
   );
 
+  const formatNodeId = (name, version) => `${name}-${version}`;
+
   sorted.forEach((version, idx) => {
-    const id = `${sbomData.name}-${version.version_id}`;
+    const id = formatNodeId(sbomData.name, version.version_id);
     const node = {
       data: {
         id,
         label: `${sbomData.name}\n${version.version_id}`,
         vulnerabilities: version.vulnerabilities || [],
+        originalName: sbomData.name,
+        originalVersion: version.version_id
       },
       classes: `${idx === 0 ? 'root' : ''} ${version.vulnerabilities?.length ? 'vulnerable' : ''}`.trim(),
     };
@@ -629,26 +649,29 @@ const convertSbomToGraphElements = (sbomData) => {
     elements.push(node);
     seen.add(id);
 
-    version.dependencies?.forEach(dep => processDependency(dep, id, elements, seen));
+    version.dependencies?.forEach(dep => processDependency(dep, id, elements, seen, formatNodeId));
   });
 
   return elements;
 };
 
-const processDependency = (dep, parentId, elements, seen) => {
-  const depId = `${dep.name}-${dep.version_id}`;
+const processDependency = (dep, parentId, elements, seen, formatNodeId) => {
+  const depId = formatNodeId(dep.name, dep.version_id);
   if (!seen.has(depId)) {
     elements.push({
       data: {
         id: depId,
         label: `${dep.name}\n${dep.version_id}`,
         vulnerabilities: dep.vulnerabilities || [],
+
+        originalName: dep.name,
+        originalVersion: dep.version_id
       },
       classes: dep.vulnerabilities?.length ? 'vulnerable' : '',
     });
     seen.add(depId);
 
-    dep.dependencies?.forEach(child => processDependency(child, depId, elements, seen));
+    dep.dependencies?.forEach(child => processDependency(child, depId, elements, seen, formatNodeId));
   }
 
   elements.push({

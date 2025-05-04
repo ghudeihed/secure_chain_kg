@@ -5,10 +5,12 @@ const IndentedTreeView = ({ data, format, onNodeClick }) => {
   const [expandedNodes, setExpandedNodes] = useState(new Set());
   const [hoveredNode, setHoveredNode] = useState(null);
 
+  const formatNodeId = (name, versionId) => `${name}-${versionId}`;
+
   useEffect(() => {
     if (data?.versions && data.versions.length > 0) {
       const rootVersion = data.versions[0];
-      const rootNodeId = `${data.name}-${rootVersion.version_id}`;
+      const rootNodeId = formatNodeId(data.name, rootVersion.version_id);
       setExpandedNodes(new Set([rootNodeId]));
     }
   }, [data]);
@@ -22,9 +24,14 @@ const IndentedTreeView = ({ data, format, onNodeClick }) => {
     });
   };
 
-  const handleNodeClick = (node, version) => {
+  const handleNodeClick = (node, version, event) => {
+    // Stop event propagation to prevent parent nodes from being clicked
+    event.stopPropagation();
+    
     if (onNodeClick) {
-      onNodeClick(`${node.name}-${version.version_id}`);
+      const nodeId = formatNodeId(node.name, version.version_id);
+      console.log(`Tree view clicked node: ${nodeId}`);
+      onNodeClick(nodeId);
     }
   };
 
@@ -37,7 +44,7 @@ const IndentedTreeView = ({ data, format, onNodeClick }) => {
   };
 
   const renderNode = (node, version, level = 0, isRoot = false) => {
-    const nodeId = `${node.name}-${version.version_id}`;
+    const nodeId = formatNodeId(node.name, version.version_id);
     const isExpanded = expandedNodes.has(nodeId);
     const isHovered = hoveredNode === nodeId;
     const { dependencies = [], vulnerabilities = [] } = version;
@@ -49,9 +56,11 @@ const IndentedTreeView = ({ data, format, onNodeClick }) => {
         key={nodeId} 
         className={`tree-node ${isHovered ? 'hovered' : ''}`} 
         style={{ paddingLeft: `${level * 20}px` }}
-        onClick={() => handleNodeClick(node, version)}
+        // Pass the event object to handleNodeClick
+        onClick={(e) => handleNodeClick(node, version, e)}
         onMouseEnter={() => handleMouseEnter(nodeId)}
         onMouseLeave={handleMouseLeave}
+        data-node-id={nodeId}
       >
         <div
           className={`node-label ${isRoot ? 'root' : ''} ${hasVulnerabilities ? 'vulnerable' : ''}`}
@@ -77,7 +86,7 @@ const IndentedTreeView = ({ data, format, onNodeClick }) => {
         </div>
 
         {isExpanded && hasChildren && (
-          <div className="node-children">
+          <div className="node-children" onClick={(e) => e.stopPropagation()}>
             {dependencies.map((dep) =>
               renderNode(dep, {
                 version_id: dep.version_id,

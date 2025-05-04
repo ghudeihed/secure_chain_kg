@@ -19,6 +19,7 @@ const SBOMGenerator = () => {
   const [focusNodeId, setFocusNodeId] = useState(null);
   const [viewTransitioning, setViewTransitioning] = useState(false);
   const graphRef = useRef(null);
+  const pendingNodeFocusRef = useRef(null);
 
   useEffect(() => {
     return () => {
@@ -46,6 +47,7 @@ const SBOMGenerator = () => {
       return { json: null, spdx: null, cyclonedx: null };
     });
     setFocusNodeId(null);
+    pendingNodeFocusRef.current = null;
 
     const formats = ['json', 'spdx', 'cyclonedx'];
     const requests = formats.map((fmt) =>
@@ -118,13 +120,24 @@ const SBOMGenerator = () => {
       return;
     }
 
+    pendingNodeFocusRef.current = nodeId;
+    
     setViewTransitioning(true);
     setViewMode('graph');
+
     setTimeout(() => {
-      setFocusNodeId(nodeId);
+      setFocusNodeId(pendingNodeFocusRef.current);
+      pendingNodeFocusRef.current = null;
       setViewTransitioning(false);
     }, 300);
   };
+
+  useEffect(() => {
+    if (viewMode === 'graph' && pendingNodeFocusRef.current && !viewTransitioning) {
+      setFocusNodeId(pendingNodeFocusRef.current);
+      pendingNodeFocusRef.current = null;
+    }
+  }, [viewMode, viewTransitioning]);
 
   const renderErrors = () => {
     const activeErrors = Object.entries(errors).filter(([, err]) => err);
@@ -165,11 +178,18 @@ const SBOMGenerator = () => {
               if (viewTransitioning) return;
               
               setViewTransitioning(true);
+
               if (viewMode === 'graph') {
+                pendingNodeFocusRef.current = focusNodeId;
                 setFocusNodeId(null);
               }
+
               setViewMode(viewMode === 'graph' ? 'tree' : 'graph');
+              
               setTimeout(() => {
+                if (viewMode === 'tree' && pendingNodeFocusRef.current) {
+                  setFocusNodeId(pendingNodeFocusRef.current);
+                }
                 setViewTransitioning(false);
               }, 300);
             }}
@@ -249,10 +269,10 @@ const SBOMGenerator = () => {
 
   return (
     <div className="sbom-generator">
-      <header className="app-header">
+      {/* <header className="app-header">
         <h1>SBOM Construction Tool</h1>
         <p>Generate Software Bill of Materials</p>
-      </header>
+      </header> */}
       <div className="main-content">
         <div className="form-container">
           <form onSubmit={handleSubmit} aria-labelledby="form-title">
