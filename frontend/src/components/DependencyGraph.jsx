@@ -17,6 +17,38 @@ const DependencyGraph = forwardRef(({ data, format, focusNodeId }, ref) => {
   const animationInProgressRef = useRef(false);
   const layoutFinishedRef = useRef(false);
 
+  const handleClearFocusClick = () => {
+    console.log("Clear focus button clicked directly");
+    if (cyRef.current && !animationInProgressRef.current) {
+      animationInProgressRef.current = true;
+      
+      console.log("Clearing node highlighting and focus");
+
+      cyRef.current.elements().removeClass('highlighted highlighted-edge focus-pulse');
+      cyRef.current.style().update();
+      setCurrentFocusedNode(null);
+      
+      cyRef.current.animation({
+        fit: { padding: 50 },
+        duration: 300
+      })
+      .play()
+      .promise('complete')
+      .then(() => {
+        animationInProgressRef.current = false;
+        console.log("Focus cleared and view reset directly");
+      })
+      .catch((err) => {
+        console.error("Animation error in direct handler:", err);
+        animationInProgressRef.current = false;
+      });
+    } else {
+      console.log("Cannot clear focus: animation in progress or no graph reference");
+      console.log("Animation in progress:", animationInProgressRef.current);
+      console.log("Graph available:", !!cyRef.current);
+    }
+  };
+
   useImperativeHandle(ref, () => ({
     zoomToNode: (nodeId) => {
       if (cyRef.current && nodeId) {
@@ -28,8 +60,7 @@ const DependencyGraph = forwardRef(({ data, format, focusNodeId }, ref) => {
     },
     resetFocus: () => {
       if (cyRef.current) {
-        resetNodeHighlighting();
-        resetView();
+        handleClearFocusClick();
       }
     }
   }));
@@ -50,7 +81,16 @@ const DependencyGraph = forwardRef(({ data, format, focusNodeId }, ref) => {
       console.log("Animation in progress or layout not finished, deferring focus");
       
       if (!layoutFinishedRef.current) {
-        setTimeout(() => focusOnNode(node), 500);
+        const checkInterval = setInterval(() => {
+          if (layoutFinishedRef.current && !animationInProgressRef.current) {
+            clearInterval(checkInterval);
+            focusOnNode(node);
+          }
+        }, 200);
+        
+        setTimeout(() => {
+          clearInterval(checkInterval);
+        }, 5000);
       }
       return;
     }
@@ -64,33 +104,43 @@ const DependencyGraph = forwardRef(({ data, format, focusNodeId }, ref) => {
     node.addClass('highlighted');
     const connectedEdges = node.connectedEdges();
     connectedEdges.addClass('highlighted-edge');
-    cyRef.current.fit(undefined, 50);
     
-    setTimeout(() => {
-      cyRef.current.animation({
-        center: {
-          eles: node
-        },
+    cyRef.current.animation({
+      fit: { eles: cyRef.current.elements(), padding: 50 },
+      duration: 200
+    })
+    .play()
+    .promise('complete')
+    .then(() => {
+      return cyRef.current.animation({
+        center: { eles: node },
         zoom: 1.5,
         duration: 400,
         easing: 'ease-out'
       })
       .play()
-      .promise('complete')
-      .then(() => {
-        node.addClass('focus-pulse');
-        setTimeout(() => {
-          animationInProgressRef.current = false;
-          console.log("Focus animation completed");
-        }, 300);
-      });
-    }, 300);
+      .promise('complete');
+    })
+    .then(() => {
+      node.addClass('focus-pulse');
+      setTimeout(() => {
+        animationInProgressRef.current = false;
+        console.log("Focus animation completed");
+      }, 200);
+    })
+    .catch(err => {
+      console.error("Animation error:", err);
+      animationInProgressRef.current = false;
+    });
   };
 
   const resetNodeHighlighting = () => {
     if (cyRef.current) {
       cyRef.current.elements().removeClass('highlighted highlighted-edge focus-pulse');
+      cyRef.current.style().update();
       setCurrentFocusedNode(null);
+      
+      console.log("Node highlighting reset");
     }
   };
 
@@ -147,11 +197,11 @@ const DependencyGraph = forwardRef(({ data, format, focusNodeId }, ref) => {
           idealEdgeLength: 150,
           edgeElasticity: 100,
           nestingFactor: 1.5, 
-          gravity: 80,             // Stronger gravity keeps components together
-          numIter: 3000,           // More iterations for better layout
-          initialTemp: 200,        // Higher temperature allows more movement
-          coolingFactor: 0.95,     // Slower cooling for better optimization
-          randomize: true,         // Start with random positions for better results
+          gravity: 80,
+          numIter: 3000,
+          initialTemp: 200,
+          coolingFactor: 0.95,
+          randomize: true,
         };
       } 
       else if (elementCount > 50) {
@@ -175,11 +225,11 @@ const DependencyGraph = forwardRef(({ data, format, focusNodeId }, ref) => {
         layoutOptions = {
           ...layoutOptions,
           name: finalLayoutName,
-          rankDir: 'LR',          // Left to right layout
-          rankSep: 200,           // Large vertical separation between ranks
-          nodeSep: 150,           // Large horizontal separation between nodes
-          edgeSep: 80,            // Edge separation
-          ranker: 'longest-path', // Use longest-path for better hierarchies
+          rankDir: 'LR',
+          rankSep: 200,
+          nodeSep: 150,
+          edgeSep: 80,
+          ranker: 'longest-path',
         };
       }
       
@@ -237,8 +287,8 @@ const DependencyGraph = forwardRef(({ data, format, focusNodeId }, ref) => {
           'text-wrap': 'wrap',
           'text-max-width': '120px',
           'padding': '12px',
-          'width': 'label',
-          'height': 'label',
+          'width': 40,
+          'height': 40,
           'transition-property': 'background-color, border-color, border-width, width, height',
           'transition-duration': '0.3s',
         },
@@ -276,24 +326,13 @@ const DependencyGraph = forwardRef(({ data, format, focusNodeId }, ref) => {
           },
           'z-index': 999,
           'overlay-opacity': 0,
-          'shadow-blur': 15,
-          'shadow-color': '#E74C3C',
-          'shadow-opacity': 0.8,
-          'shadow-offset-x': 0,
-          'shadow-offset-y': 0,
         },
       },
       {
         selector: 'node.focus-pulse',
         style: {
-          'width': ele => {
-            const currentWidth = ele.style('width');
-            return parseFloat(currentWidth) * 1.2;
-          },
-          'height': ele => {
-            const currentHeight = ele.style('height');
-            return parseFloat(currentHeight) * 1.2;
-          },
+          'width': 48,
+          'height': 48,
           'font-size': '16px',
           'font-weight': 'bold',
           'text-background-opacity': 0.7,
@@ -339,7 +378,7 @@ const DependencyGraph = forwardRef(({ data, format, focusNodeId }, ref) => {
         zoom: 1,
         minZoom: 0.2,
         maxZoom: 3,
-        wheelSensitivity: 0.2,
+        wheelSensitivity: 0.5,
         pixelRatio: 'auto',
         
         autoungrabify: false,
@@ -442,21 +481,41 @@ const DependencyGraph = forwardRef(({ data, format, focusNodeId }, ref) => {
     }
   }, [focusNodeId, isInitialized]);
 
+  useEffect(() => {
+    document.addEventListener('click', (e) => {
+      if (e.target.className === 'clear-focus-button') {
+        console.log('Button clicked - captured at document level');
+      }
+    });
+  }, []);
+
   const zoomIn = () => {
     if (cyRef.current && !animationInProgressRef.current) {
+      animationInProgressRef.current = true;
       cyRef.current.animation({
         zoom: cyRef.current.zoom() * 1.2,
         duration: 200
-      }).play();
+      })
+      .play()
+      .promise('complete')
+      .then(() => {
+        animationInProgressRef.current = false;
+      });
     }
   };
   
   const zoomOut = () => {
     if (cyRef.current && !animationInProgressRef.current) {
+      animationInProgressRef.current = true;
       cyRef.current.animation({
         zoom: cyRef.current.zoom() / 1.2,
         duration: 200
-      }).play();
+      })
+      .play()
+      .promise('complete')
+      .then(() => {
+        animationInProgressRef.current = false;
+      });
     }
   };
 
@@ -469,14 +528,16 @@ const DependencyGraph = forwardRef(({ data, format, focusNodeId }, ref) => {
           <button onClick={resetView} disabled={animationInProgressRef.current}>Reset View</button>
           {currentFocusedNode && (
             <button 
-              onClick={() => {
-                if (!animationInProgressRef.current) {
-                  resetNodeHighlighting();
-                  resetView();
+              onClick={(e) => {
+                e.stopPropagation();                
+                setCurrentFocusedNode(null);
+                
+                if (cyRef.current) {
+                  cyRef.current.elements().removeClass('highlighted highlighted-edge focus-pulse');
+                  cyRef.current.fit();
                 }
               }}
               className="clear-focus-button"
-              disabled={animationInProgressRef.current}
             >
               Clear Focus
             </button>
